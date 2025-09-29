@@ -31,7 +31,8 @@ RUN apk add --no-cache \
     nginx \
     supervisor \
     bash \
-    ca-certificates
+    ca-certificates \
+    gettext
 
 # Install OpenTofu manually
 RUN TOFU_VERSION="1.6.0" && \
@@ -86,12 +87,9 @@ EXPOSE 80
 # Define volumes
 VOLUME ["/usercontent", "/data"]
 
-# Switch to non-root user for security
-USER nodejs
-
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:3001/api/deployments || exit 1
 
-# Use entrypoint script
+# Use entrypoint script (runs as root, but supervisord manages user processes)
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

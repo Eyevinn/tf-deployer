@@ -6,6 +6,9 @@ PORT=${PORT:-80}
 
 echo "Starting OpenTofu Deployer on port $PORT"
 
+# This script needs to run as root to configure nginx, then supervisor will
+# manage processes with appropriate users
+
 # Substitute environment variables in nginx configuration
 envsubst '${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
