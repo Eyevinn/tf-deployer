@@ -219,8 +219,16 @@ app.delete('/api/deployments/:id', async (req, res) => {
 
 // Catch-all handler for SPA routing in production
 if (process.env.NODE_ENV === 'production') {
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  app.use((req, res, next) => {
+    // Skip API routes and static assets
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    // Only handle GET requests for HTML routes
+    if (req.method === 'GET' && !req.path.includes('.')) {
+      return res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+    next();
   });
 }
 
@@ -236,7 +244,9 @@ io.on('connection', (socket) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3001;
+// In production with nginx, always use port 3001 for Node.js app
+// PORT env var is used for nginx configuration only
+const PORT = process.env.NODE_ENV === 'production' ? 3001 : (process.env.PORT || 3001);
 
 ensureDirectories().then(() => {
   server.listen(PORT, () => {
