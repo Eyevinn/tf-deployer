@@ -205,6 +205,10 @@ interface RepositoryData {
 
 The API supports various Terraform and cloud provider environment variables:
 
+### Application Configuration
+- `TEMP_DIR` - Custom temporary directory (defaults to ./temp)
+- `DEPLOYMENTS_DIR` - Custom deployments directory (defaults to ./deployments)
+
 ### Terraform Configuration
 - `TF_DATA_DIR` - Custom directory for Terraform state files
 - `TF_WORKSPACE` - Terraform workspace
@@ -219,6 +223,32 @@ The API supports various Terraform and cloud provider environment variables:
 - **GCP**: `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_PROJECT`, `GOOGLE_REGION`
 
 See [TERRAFORM_CONFIG.md](./TERRAFORM_CONFIG.md) for detailed configuration examples.
+
+### Usage Examples
+
+#### Custom Directory Configuration
+```bash
+# Use custom directories
+export TEMP_DIR="/var/tmp/terraform-ui"
+export DEPLOYMENTS_DIR="/opt/terraform-deployments"
+npm run server
+```
+
+#### Docker/Container Usage
+```bash
+# Map host directories to container
+docker run -e TEMP_DIR=/app/temp -e DEPLOYMENTS_DIR=/app/deployments \
+  -v /host/temp:/app/temp -v /host/deployments:/app/deployments \
+  terraform-ui-deployer
+```
+
+#### Development with Terraform Cloud
+```bash
+export TF_CLOUD_ORGANIZATION="my-org"
+export TF_TOKEN="your-terraform-cloud-token"
+export DEPLOYMENTS_DIR="/tmp/dev-deployments"
+npm run server
+```
 
 ## File Permissions
 

@@ -525,7 +525,11 @@ x-websocket-api:
     description: |
       ## Environment Variables
       
-      The API supports various Terraform and cloud provider environment variables for backend configuration and authentication:
+      The API supports various application, Terraform and cloud provider environment variables for configuration and authentication:
+      
+      ### Application Configuration
+      - `TEMP_DIR` - Custom temporary directory (defaults to ./temp)
+      - `DEPLOYMENTS_DIR` - Custom deployments directory (defaults to ./deployments)
       
       ### Terraform Configuration
       - `TF_DATA_DIR` - Custom directory for Terraform state files
