@@ -24,6 +24,7 @@ function App() {
   const [repoData, setRepoData] = useState<RepoData | null>(null)
   const [isDeploying, setIsDeploying] = useState(false)
   const [deploymentId, setDeploymentId] = useState<string | null>(null)
+  const [userVariables, setUserVariables] = useState<Record<string, any> | null>(null)
 
   const handleRepositoryParsed = (data: RepoData) => {
     setRepoData(data)
@@ -32,6 +33,7 @@ function App() {
   const handleDeploy = (variables: Record<string, any>) => {
     const newDeploymentId = `deploy-${Date.now()}`
     setDeploymentId(newDeploymentId)
+    setUserVariables(variables)
     setIsDeploying(true)
   }
 
@@ -111,6 +113,7 @@ function App() {
                   <DeploymentProgress 
                     deploymentId={deploymentId}
                     repoData={repoData}
+                    userVariables={userVariables}
                     onComplete={handleDeploymentComplete}
                   />
                 </div>

@@ -62,10 +62,8 @@ app.post('/api/parse-github-url', async (req, res) => {
       return res.status(404).json({ error: 'No .tf files found in the repository' });
     }
     
-    // Get optional tfvars file for default values
-    const tfvarsFile = files.find(file => 
-      file.name.endsWith('.tfvars') || file.name.endsWith('.tfvars.example')
-    );
+    // Skip tfvars file parsing - only use Terraform files for variables
+    const tfvarsFile = null;
     
     // Get README file
     const readmeFile = files.find(file => 
@@ -85,17 +83,8 @@ app.post('/api/parse-github-url', async (req, res) => {
       }
     }
     
-    // Parse tfvars for default values if available
+    // Skip tfvars parsing - sensitive variables not provided during deployment
     let tfvarsVariables = {};
-    if (tfvarsFile) {
-      try {
-        const tfvarsResponse = await axios.get(tfvarsFile.download_url);
-        const tfvarsContent = tfvarsResponse.data;
-        tfvarsVariables = parseTfvarsContent(tfvarsContent);
-      } catch (error) {
-        console.log('Could not fetch tfvars file:', error.message);
-      }
-    }
     
     // Parse README for additional documentation
     let readmeContent = '';
@@ -178,8 +167,8 @@ function parseTerraformVariables(content, fileName) {
       variable.description = descriptionMatch[1];
     }
     
-    // Parse default value
-    const defaultMatch = blockContent.match(/default\s*=\s*([^,}\n]+)/);
+    // Parse default value - handle quoted strings and simple values
+    const defaultMatch = blockContent.match(/default\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s\n]+)/);
     if (defaultMatch) {
       let defaultValue = defaultMatch[1].trim();
       
@@ -374,49 +363,194 @@ function inferType(typeHint, defaultValue) {
   return 'string';
 }
 
-function startTerraformApply(deploymentDir, socket) {
-  const tofu = spawn('tofu', ['apply', '-auto-approve', '-var-file=terraform.tfvars'], {
+function extractSensitiveEnvVars(variables, terraformVariables = {}) {
+  const envVars = {};
+  
+  // Add common Terraform environment variables for backend configuration
+  const terraformSystemEnvVars = [
+    'TF_DATA_DIR',           // Directory for Terraform data
+    'TF_WORKSPACE',          // Terraform workspace
+    'TF_IN_AUTOMATION',      // Flag for automation mode
+    'TF_INPUT',              // Disable interactive input
+    'TF_CLI_CONFIG_FILE',    // CLI configuration file location
+    'TF_PLUGIN_CACHE_DIR',   // Plugin cache directory
+    'TF_REGISTRY_DISCOVERY_RETRY', // Registry discovery retry
+    'TF_REGISTRY_CLIENT_TIMEOUT',  // Registry client timeout
+    
+    // Backend-specific environment variables
+    'TF_BACKEND_CONFIG',     // Backend configuration
+    'TF_FORCE_LOCAL_BACKEND', // Force local backend
+    'TF_SKIP_REMOTE_TESTS',  // Skip remote tests
+    
+    // State locking and storage
+    'TF_STATE_LOCK',         // Enable/disable state locking
+    'TF_STATE_LOCK_TIMEOUT', // State lock timeout
+    'TF_LOCK_TIMEOUT',       // Lock timeout
+    
+    // Cloud/remote backend variables
+    'TF_CLOUD_ORGANIZATION', // Terraform Cloud organization
+    'TF_CLOUD_HOSTNAME',     // Terraform Cloud hostname
+    'TF_TOKEN',              // Terraform Cloud token
+    'TF_TOKEN_app_terraform_io', // Terraform Cloud app token
+    
+    // Provider-specific variables that might affect state
+    'AWS_PROFILE', 'AWS_REGION', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY',
+    'AZURE_SUBSCRIPTION_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID',
+    'GOOGLE_APPLICATION_CREDENTIALS', 'GOOGLE_PROJECT', 'GOOGLE_REGION',
+    'CONSUL_HTTP_ADDR', 'CONSUL_HTTP_TOKEN',
+    'ETCDV3_ENDPOINTS'
+  ];
+  
+  // Include system Terraform environment variables if they exist
+  terraformSystemEnvVars.forEach(envVar => {
+    if (process.env[envVar]) {
+      envVars[envVar] = process.env[envVar];
+    }
+  });
+  
+  // Set default values for automation
+  envVars['TF_IN_AUTOMATION'] = 'true';
+  envVars['TF_INPUT'] = 'false';
+  
+  // Extract variables marked as sensitive using original Terraform definitions
+  Object.entries(variables).forEach(([key, userValue]) => {
+    // Check if this variable is marked as sensitive in the original Terraform definition
+    const terraformVar = terraformVariables[key];
+    if (terraformVar && terraformVar.sensitive === true) {
+      // Get the user-provided value
+      const value = (userValue && typeof userValue === 'object' && userValue.value !== undefined) 
+        ? userValue.value 
+        : userValue;
+      
+      // Always pass sensitive variables as environment variables
+      // For required variables without values, pass empty string to let Terraform handle the error gracefully
+      const envValue = (value !== null && value !== undefined && value !== '') ? value : '';
+      envVars[`TF_VAR_${key}`] = envValue;
+    }
+  });
+  
+  return envVars;
+}
+
+async function createBackendConfig(deploymentDir, envVars) {
+  // Create a basic backend configuration if TF_DATA_DIR is set
+  if (envVars.TF_DATA_DIR) {
+    const backendConfig = `
+# Auto-generated backend configuration for state management
+terraform {
+  backend "local" {
+    path = "${envVars.TF_DATA_DIR}/terraform.tfstate"
+  }
+}
+`;
+    
+    const backendPath = path.join(deploymentDir, 'backend.tf');
+    await fs.writeFile(backendPath, backendConfig);
+    return true;
+  }
+  
+  return false;
+}
+
+function startTerraformApply(deploymentDir, socket, fullEnv = process.env) {
+  // Debug: Test if tofu can see the environment variables
+  socket.emit('deployment-log', { 
+    message: 'Debug: Testing if tofu can see environment variables...', 
+    timestamp: new Date().toISOString() 
+  });
+  
+  const envTest = spawn('tofu', ['console'], {
     cwd: deploymentDir,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: fullEnv
   });
   
-  tofu.stdout.on('data', (data) => {
+  // Send a command to check if variables are accessible
+  const tfVarNames = Object.keys(fullEnv).filter(key => key.startsWith('TF_VAR_'));
+  if (tfVarNames.length > 0) {
+    const testCommands = tfVarNames.map(name => `var.${name.substring(7)}`).join('\n') + '\nexit\n';
+    envTest.stdin.write(testCommands);
+    envTest.stdin.end();
+  } else {
+    envTest.stdin.write('exit\n');
+    envTest.stdin.end();
+  }
+  
+  envTest.stdout.on('data', (data) => {
     const message = data.toString();
-    socket.emit('deployment-log', { 
-      message, 
-      timestamp: new Date().toISOString() 
-    });
-  });
-  
-  tofu.stderr.on('data', (data) => {
-    const message = data.toString();
-    socket.emit('deployment-error', { 
-      message, 
-      timestamp: new Date().toISOString() 
-    });
-  });
-  
-  tofu.on('close', (code) => {
-    if (code === 0) {
-      socket.emit('deployment-complete', { 
-        success: true, 
-        message: 'Deployment completed successfully',
-        timestamp: new Date().toISOString() 
-      });
-    } else {
-      socket.emit('deployment-complete', { 
-        success: false, 
-        message: `Deployment failed with exit code ${code}`,
+    if (message.trim() && !message.includes('exit')) {
+      socket.emit('deployment-log', { 
+        message: `Debug: Variable test result: ${message.trim()}`, 
         timestamp: new Date().toISOString() 
       });
     }
+  });
+  
+  envTest.on('close', (code) => {
+    socket.emit('deployment-log', { 
+      message: 'Debug: Starting actual deployment...', 
+      timestamp: new Date().toISOString() 
+    });
+    
+    // Now run the actual apply
+    const tofu = spawn('tofu', ['apply', '-auto-approve', '-var-file=terraform.tfvars'], {
+      cwd: deploymentDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: fullEnv
+    });
+    
+    tofu.stdout.on('data', (data) => {
+      const message = data.toString();
+      socket.emit('deployment-log', { 
+        message, 
+        timestamp: new Date().toISOString() 
+      });
+    });
+    
+    tofu.stderr.on('data', (data) => {
+      const message = data.toString();
+      socket.emit('deployment-error', { 
+        message, 
+        timestamp: new Date().toISOString() 
+      });
+    });
+    
+    tofu.on('close', (code) => {
+      if (code === 0) {
+        socket.emit('deployment-complete', { 
+          success: true, 
+          message: 'Deployment completed successfully',
+          timestamp: new Date().toISOString() 
+        });
+      } else {
+        socket.emit('deployment-complete', { 
+          success: false, 
+          message: `Deployment failed with exit code ${code}`,
+          timestamp: new Date().toISOString() 
+        });
+      }
+    });
   });
 }
 
 function generateTfvarsContent(variables) {
   const lines = [];
   
-  Object.entries(variables).forEach(([key, value]) => {
+  Object.entries(variables).forEach(([key, variableInfo]) => {
+    // Handle null or undefined variableInfo
+    if (!variableInfo) {
+      return;
+    }
+    
+    // Skip sensitive variables - they'll always be passed as environment variables now
+    if (variableInfo.sensitive === true) {
+      return;
+    }
+    
+    // Extract the actual value - handle both object format and direct value format
+    const value = (typeof variableInfo === 'object' && variableInfo.value !== undefined) 
+      ? variableInfo.value 
+      : variableInfo;
     let formattedValue;
     
     if (value === null || value === undefined) {
@@ -477,11 +611,7 @@ function mergeAllVariables(terraformVariables, tfvarsVariables, readmeVariables)
       sources: ['terraform']
     };
     
-    // Override with tfvars value if available
-    if (tfvarsVariables[key]) {
-      merged[key].value = tfvarsVariables[key].value;
-      merged[key].sources.push('tfvars');
-    }
+    // Skip tfvars processing - only use Terraform and README sources
     
     // Enhance description from README if available and not already set
     if (readmeVariables[key] && readmeVariables[key].description && !merged[key].description) {
@@ -492,22 +622,7 @@ function mergeAllVariables(terraformVariables, tfvarsVariables, readmeVariables)
     }
   });
   
-  // Add variables that are only in tfvars (not defined in .tf files)
-  Object.entries(tfvarsVariables).forEach(([key, tfvarsVar]) => {
-    if (!merged[key]) {
-      merged[key] = {
-        ...tfvarsVar,
-        sources: ['tfvars'],
-        required: false // Variables only in tfvars are likely optional
-      };
-      
-      // Add README description if available
-      if (readmeVariables[key] && readmeVariables[key].description) {
-        merged[key].description = readmeVariables[key].description;
-        merged[key].sources.push('readme');
-      }
-    }
-  });
+  // Skip tfvars-only variables processing since we're not parsing tfvars
   
   // Add variables that are only in README (documentation-only)
   Object.entries(readmeVariables).forEach(([key, readmeVar]) => {
@@ -571,12 +686,26 @@ app.post('/api/deploy', async (req, res) => {
     
     await downloadRepository(repoData, deploymentDir);
     
+    // Extract environment variables for sensitive variables and system config
+    // Use original Terraform variables from repoData for sensitive flag detection
+    const terraformVariables = repoData.terraformVariables || {};
+    const envVars = extractSensitiveEnvVars(variables, terraformVariables);
+    
     const tfvarsPath = path.join(deploymentDir, 'terraform.tfvars');
     const tfvarsContent = generateTfvarsContent(variables);
     
     await fs.writeFile(tfvarsPath, tfvarsContent);
     
     const socket = io.to(deploymentId);
+    
+    // Create backend configuration if needed
+    const backendCreated = await createBackendConfig(deploymentDir, envVars);
+    if (backendCreated) {
+      socket.emit('deployment-log', { 
+        message: 'Created backend configuration for state management', 
+        timestamp: new Date().toISOString() 
+      });
+    }
     
     socket.emit('deployment-log', { 
       message: 'Repository downloaded and terraform.tfvars created', 
@@ -593,10 +722,134 @@ app.post('/api/deploy', async (req, res) => {
       timestamp: new Date().toISOString() 
     });
     
+    // Debug: Log all variables being processed
+    socket.emit('deployment-log', { 
+      message: `Debug: Processing ${Object.keys(variables).length} variables: ${Object.keys(variables).join(', ')}`, 
+      timestamp: new Date().toISOString() 
+    });
+    
+    // Debug: Show detailed structure of each variable
+    Object.entries(variables).forEach(([key, info]) => {
+      socket.emit('deployment-log', { 
+        message: `Debug: ${key} - type: ${typeof info}, isObject: ${typeof info === 'object' && info !== null}`, 
+        timestamp: new Date().toISOString() 
+      });
+      
+      if (info && typeof info === 'object' && info !== null) {
+        socket.emit('deployment-log', { 
+          message: `Debug: ${key} structure: sensitive=${info.sensitive}, value=${info.value ? '[SET]' : '[EMPTY]'}, type=${info.type}`, 
+          timestamp: new Date().toISOString() 
+        });
+        
+        // Show all properties of the object
+        socket.emit('deployment-log', { 
+          message: `Debug: ${key} all properties: ${JSON.stringify(info)}`, 
+          timestamp: new Date().toISOString() 
+        });
+      } else {
+        socket.emit('deployment-log', { 
+          message: `Debug: ${key} value: ${JSON.stringify(info)}`, 
+          timestamp: new Date().toISOString() 
+        });
+      }
+    });
+    
+    // Debug: Show original Terraform variables structure
+    socket.emit('deployment-log', { 
+      message: `Debug: Original Terraform variables: ${Object.keys(terraformVariables).join(', ')}`, 
+      timestamp: new Date().toISOString() 
+    });
+    
+    Object.entries(terraformVariables).forEach(([key, info]) => {
+      if (info) {
+        socket.emit('deployment-log', { 
+          message: `Debug: TF ${key} - sensitive: ${info.sensitive}, required: ${info.required}`, 
+          timestamp: new Date().toISOString() 
+        });
+      }
+    });
+    
+    // Debug: Show which variables are marked as sensitive using original TF definitions
+    const sensitiveVarNames = Object.entries(variables)
+      .filter(([key, userValue]) => {
+        const terraformVar = terraformVariables[key];
+        return terraformVar && terraformVar.sensitive === true;
+      })
+      .map(([key]) => key);
+    
+    if (sensitiveVarNames.length > 0) {
+      socket.emit('deployment-log', { 
+        message: `Debug: Variables marked as sensitive in TF: ${sensitiveVarNames.join(', ')}`, 
+        timestamp: new Date().toISOString() 
+      });
+    } else {
+      socket.emit('deployment-log', { 
+        message: `Debug: No variables marked as sensitive in TF definitions!`, 
+        timestamp: new Date().toISOString() 
+      });
+    }
+    
+    // Log environment variables being set (categorize them)
+    const envVarNames = Object.keys(envVars);
+    if (envVarNames.length > 0) {
+      const systemVars = envVarNames.filter(name => !name.startsWith('TF_VAR_'));
+      const sensitiveVars = envVarNames.filter(name => name.startsWith('TF_VAR_'));
+      
+      if (systemVars.length > 0) {
+        socket.emit('deployment-log', { 
+          message: `Using Terraform system environment variables: ${systemVars.join(', ')}`, 
+          timestamp: new Date().toISOString() 
+        });
+      }
+      
+      if (sensitiveVars.length > 0) {
+        socket.emit('deployment-log', { 
+          message: `Setting sensitive variables as environment variables: ${sensitiveVars.join(', ')}`, 
+          timestamp: new Date().toISOString() 
+        });
+      }
+      
+      // Debug: Show actual values being set (only for debugging)
+      Object.entries(envVars).forEach(([key, value]) => {
+        if (key.startsWith('TF_VAR_')) {
+          socket.emit('deployment-log', { 
+            message: `Debug: ${key}=${value ? '[SET]' : '[EMPTY]'}`, 
+            timestamp: new Date().toISOString() 
+          });
+        }
+      });
+    } else {
+      socket.emit('deployment-log', { 
+        message: 'Debug: No environment variables extracted', 
+        timestamp: new Date().toISOString() 
+      });
+    }
+    
+    // Debug: Show exactly what environment will be passed to tofu
+    const tofuEnv = { ...process.env, ...envVars };
+    const tofuEnvVars = Object.keys(tofuEnv).filter(key => key.startsWith('TF_VAR_') || key.startsWith('TF_'));
+    
+    if (tofuEnvVars.length > 0) {
+      socket.emit('deployment-log', { 
+        message: `Debug: Environment variables that will be passed to tofu: ${tofuEnvVars.join(', ')}`, 
+        timestamp: new Date().toISOString() 
+      });
+      
+      // Show specific TF_VAR_ variables and their status
+      tofuEnvVars.filter(key => key.startsWith('TF_VAR_')).forEach(key => {
+        const hasValue = tofuEnv[key] && tofuEnv[key].length > 0;
+        socket.emit('deployment-log', { 
+          message: `Debug: ${key}=${hasValue ? '[HAS_VALUE]' : '[EMPTY]'}`, 
+          timestamp: new Date().toISOString() 
+        });
+      });
+    }
+    
     // First run terraform init
     const init = spawn('tofu', ['init'], {
       cwd: deploymentDir,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: tofuEnv
     });
     
     init.stdout.on('data', (data) => {
@@ -623,7 +876,7 @@ app.post('/api/deploy', async (req, res) => {
         });
         
         // Start the apply process
-        startTerraformApply(deploymentDir, socket);
+        startTerraformApply(deploymentDir, socket, tofuEnv);
       } else {
         socket.emit('deployment-complete', { 
           success: false, 

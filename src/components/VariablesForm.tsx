@@ -144,7 +144,7 @@ const VariablesForm: React.FC<VariablesFormProps> = ({ variables, onDeploy, isDe
     return (
       <div className="text-center py-8 text-gray-500">
         <Settings className="h-8 w-8 mx-auto mb-2 opacity-50" />
-        <p>No variables found in the .tfvars file</p>
+        <p>No variables found in the Terraform files</p>
       </div>
     )
   }

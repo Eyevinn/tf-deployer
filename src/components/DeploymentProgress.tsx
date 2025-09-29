@@ -6,6 +6,7 @@ import axios from 'axios'
 interface DeploymentProgressProps {
   deploymentId: string
   repoData: any
+  userVariables: Record<string, any> | null
   onComplete: () => void
 }
 
@@ -18,6 +19,7 @@ interface LogEntry {
 const DeploymentProgress: React.FC<DeploymentProgressProps> = ({ 
   deploymentId, 
   repoData, 
+  userVariables,
   onComplete 
 }) => {
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -74,12 +76,8 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
         type: 'log' 
       }])
 
-      const variables = Object.fromEntries(
-        Object.entries(repoData.variables).map(([key, variable]: [string, any]) => [
-          key, 
-          variable.value
-        ])
-      )
+      // Use user-submitted variables instead of original repo data values
+      const variables = userVariables || {}
 
       await axios.post('http://localhost:3001/api/deploy', {
         repoData,
