@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Terminal, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react'
-import { io, Socket } from 'socket.io-client'
+import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react'
+import { io } from 'socket.io-client'
 import axios from 'axios'
 
 interface DeploymentProgressProps {
@@ -24,12 +24,10 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
 }) => {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [status, setStatus] = useState<'pending' | 'running' | 'success' | 'error'>('pending')
-  const [socket, setSocket] = useState<Socket | null>(null)
   const logsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const newSocket = io()
-    setSocket(newSocket)
 
     newSocket.emit('join-deployment', deploymentId)
 

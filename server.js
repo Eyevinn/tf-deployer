@@ -37,6 +37,11 @@ const io = new SocketIo(server, {
 app.use(cors());
 app.use(express.json());
 
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, 'dist')));
+}
+
 // API Routes
 
 /**
@@ -211,6 +216,13 @@ app.delete('/api/deployments/:id', async (req, res) => {
     res.status(500).json({ error: 'Delete failed' });
   }
 });
+
+// Catch-all handler for SPA routing in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  });
+}
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
