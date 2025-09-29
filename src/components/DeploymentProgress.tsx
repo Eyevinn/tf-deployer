@@ -28,7 +28,7 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
   const logsEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const newSocket = io('http://localhost:3001')
+    const newSocket = io()
     setSocket(newSocket)
 
     newSocket.emit('join-deployment', deploymentId)
@@ -79,7 +79,7 @@ const DeploymentProgress: React.FC<DeploymentProgressProps> = ({
       // Use user-submitted variables instead of original repo data values
       const variables = userVariables || {}
 
-      await axios.post('http://localhost:3001/api/deploy', {
+      await axios.post('/api/deploy', {
         repoData,
         variables,
         deploymentId

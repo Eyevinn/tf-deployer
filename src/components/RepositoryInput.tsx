@@ -30,7 +30,7 @@ const RepositoryInput: React.FC<RepositoryInputProps> = ({ onRepositoryParsed })
     setSuccess(false)
 
     try {
-      const response = await axios.post('http://localhost:3001/api/parse-github-url', {
+      const response = await axios.post('/api/parse-github-url', {
         repoUrl: repoUrl.trim()
       })
 
