@@ -86,7 +86,7 @@ async function parseGitHubRepository(repoUrl) {
       const fileVariables = parseTerraformVariables(tfContent, tfFile.name);
       terraformVariables = { ...terraformVariables, ...fileVariables };
     } catch (error) {
-      console.log(`Could not fetch ${tfFile.name}:`, error.message);
+      // Silently skip files that cannot be fetched
     }
   }
   
@@ -102,7 +102,7 @@ async function parseGitHubRepository(repoUrl) {
       readmeContent = await downloadFile(readmeFile.download_url);
       readmeVariables = parseReadmeForVariables(readmeContent);
     } catch (error) {
-      console.log('Could not fetch README:', error.message);
+      // Silently skip README if it cannot be fetched
     }
   }
   

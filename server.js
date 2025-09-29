@@ -61,21 +61,12 @@ app.post('/api/deploy', async (req, res) => {
     const deploymentDir = getDeploymentDir(deploymentId);
     await fs.mkdir(deploymentDir, { recursive: true });
     
-    console.log('Debug: Processing deployment request...');
-    console.log('Debug: Variables received:', Object.keys(variables || {}));
-    console.log('Debug: Terraform variables available:', Object.keys(repoData.terraformVariables || {}));
-    
     // Extract sensitive environment variables
     const terraformVariables = repoData.terraformVariables || {};
     const envVars = extractSensitiveEnvVars(variables, terraformVariables);
     
-    console.log('Debug: Environment variables set:', Object.keys(envVars).filter(k => k.startsWith('TF_VAR_')));
-    
     // Generate tfvars file content (excluding sensitive variables)
     const tfvarsContent = generateTfvarsContent(variables);
-    
-    console.log('Debug: tfvars content length:', tfvarsContent.length);
-    console.log('Debug: tfvars preview:', tfvarsContent.substring(0, 200));
     
     // Write tfvars file
     const tfvarsPath = path.join(deploymentDir, 'terraform.tfvars');
@@ -116,15 +107,6 @@ app.post('/api/deploy', async (req, res) => {
       ...envVars
     };
     
-    console.log('Debug: Full environment variables for tofu:');
-    Object.keys(tofuEnv).forEach(key => {
-      if (key.startsWith('TF_')) {
-        const value = key.includes('TOKEN') || key.includes('SECRET') || key.includes('KEY') 
-          ? '[REDACTED]' 
-          : tofuEnv[key];
-        console.log(`  ${key}=${value}`);
-      }
-    });
     
     // Start the deployment process
     startTerraformApply(deploymentDir, socket, tofuEnv);
@@ -138,15 +120,12 @@ app.post('/api/deploy', async (req, res) => {
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
-  
   socket.on('join-deployment', (deploymentId) => {
     socket.join(deploymentId);
-    console.log(`Socket ${socket.id} joined deployment ${deploymentId}`);
   });
   
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    // Client disconnected
   });
 });
 
