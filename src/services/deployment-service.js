@@ -188,42 +188,51 @@ function generateTfvarsContent(variables) {
  * @param {Object} fullEnv - Complete environment variables
  */
 function startTerraformApply(deploymentDir, socket, fullEnv = process.env) {
-  // Debug: Test if tofu can see the environment variables
   socket.emit('deployment-log', { 
-    message: 'Debug: Testing if tofu can see environment variables...', 
+    message: 'Initializing OpenTofu working directory...', 
     timestamp: new Date().toISOString() 
   });
   
-  const envTest = spawn('tofu', ['console'], {
+  // First run tofu init to initialize the working directory and download providers
+  const tofuInit = spawn('tofu', ['init'], {
     cwd: deploymentDir,
     stdio: ['pipe', 'pipe', 'pipe'],
     env: fullEnv
   });
   
-  // Send a command to check if variables are accessible
-  const tfVarNames = Object.keys(fullEnv).filter(key => key.startsWith('TF_VAR_'));
-  if (tfVarNames.length > 0) {
-    const testCommands = tfVarNames.map(name => `var.${name.substring(7)}`).join('\n') + '\nexit\n';
-    envTest.stdin.write(testCommands);
-    envTest.stdin.end();
-  } else {
-    envTest.stdin.write('exit\n');
-    envTest.stdin.end();
-  }
-  
-  envTest.stdout.on('data', (data) => {
+  tofuInit.stdout.on('data', (data) => {
     const message = data.toString();
-    if (message.trim() && !message.includes('exit')) {
-      socket.emit('deployment-log', { 
-        message: `Debug: Variable test result: ${message.trim()}`, 
-        timestamp: new Date().toISOString() 
-      });
-    }
+    socket.emit('deployment-log', { 
+      message, 
+      timestamp: new Date().toISOString() 
+    });
   });
   
-  envTest.on('close', (code) => {
+  tofuInit.stderr.on('data', (data) => {
+    const message = data.toString();
+    socket.emit('deployment-error', { 
+      message, 
+      timestamp: new Date().toISOString() 
+    });
+  });
+  
+  tofuInit.on('close', (initCode) => {
+    if (initCode !== 0) {
+      socket.emit('deployment-complete', { 
+        success: false, 
+        message: `OpenTofu initialization failed with exit code ${initCode}`,
+        timestamp: new Date().toISOString() 
+      });
+      return;
+    }
+    
     socket.emit('deployment-log', { 
-      message: 'Debug: Starting actual deployment...', 
+      message: 'OpenTofu initialization completed successfully', 
+      timestamp: new Date().toISOString() 
+    });
+    
+    socket.emit('deployment-log', { 
+      message: 'Starting OpenTofu apply...', 
       timestamp: new Date().toISOString() 
     });
     

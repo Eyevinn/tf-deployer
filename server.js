@@ -97,7 +97,7 @@ app.post('/api/deploy', async (req, res) => {
     });
     
     socket.emit('deployment-log', { 
-      message: 'Starting Terraform initialization...', 
+      message: 'Preparing OpenTofu deployment...', 
       timestamp: new Date().toISOString() 
     });
     
