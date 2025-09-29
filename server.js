@@ -14,6 +14,12 @@ import {
   generateTfvarsContent, 
   startTerraformApply 
 } from './src/services/deployment-service.js';
+import { 
+  getDeploymentHistory, 
+  getDeploymentMetadata, 
+  destroyDeployment, 
+  deleteDeploymentDirectory 
+} from './src/services/deployment-history-service.js';
 import { ensureDirectories, getDeploymentDir } from './src/utils/file-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,19 +67,38 @@ app.post('/api/deploy', async (req, res) => {
     const deploymentDir = getDeploymentDir(deploymentId);
     await fs.mkdir(deploymentDir, { recursive: true });
     
+    const socket = io.to(deploymentId);
+    
+    socket.emit('deployment-log', { 
+      message: 'Downloading repository files...', 
+      timestamp: new Date().toISOString() 
+    });
+    
+    // Download repository files FIRST
+    await downloadRepository(repoData, deploymentDir);
+    
+    socket.emit('deployment-log', { 
+      message: 'Repository files downloaded', 
+      timestamp: new Date().toISOString() 
+    });
+    
     // Extract sensitive environment variables
     const terraformVariables = repoData.terraformVariables || {};
     const envVars = extractSensitiveEnvVars(variables, terraformVariables);
     
-    // Generate tfvars file content (excluding sensitive variables)
+    // Generate tfvars file content (excluding sensitive variables) AFTER download
     const tfvarsContent = generateTfvarsContent(variables);
     
-    // Write tfvars file
+    // Write tfvars file (this will overwrite any existing tfvars from repo)
     const tfvarsPath = path.join(deploymentDir, 'terraform.tfvars');
     await fs.writeFile(tfvarsPath, tfvarsContent);
     
+    socket.emit('deployment-log', { 
+      message: 'User variables configured', 
+      timestamp: new Date().toISOString() 
+    });
+    
     // Create backend configuration if needed
-    const socket = io.to(deploymentId);
     const backendCreated = await createBackendConfig(deploymentDir, envVars);
     
     if (backendCreated) {
@@ -82,19 +107,6 @@ app.post('/api/deploy', async (req, res) => {
         timestamp: new Date().toISOString() 
       });
     }
-    
-    socket.emit('deployment-log', { 
-      message: 'Downloading repository files...', 
-      timestamp: new Date().toISOString() 
-    });
-    
-    // Download repository files
-    await downloadRepository(repoData, deploymentDir);
-    
-    socket.emit('deployment-log', { 
-      message: 'Repository files downloaded', 
-      timestamp: new Date().toISOString() 
-    });
     
     socket.emit('deployment-log', { 
       message: 'Preparing OpenTofu deployment...', 
@@ -115,6 +127,88 @@ app.post('/api/deploy', async (req, res) => {
   } catch (error) {
     console.error('Deployment error:', error);
     res.status(500).json({ error: 'Deployment failed' });
+  }
+});
+
+/**
+ * Get deployment history
+ */
+app.get('/api/deployments', async (req, res) => {
+  try {
+    const deployments = await getDeploymentHistory();
+    res.json(deployments);
+  } catch (error) {
+    console.error('Error getting deployment history:', error);
+    res.status(500).json({ error: 'Failed to get deployment history' });
+  }
+});
+
+/**
+ * Get specific deployment metadata
+ */
+app.get('/api/deployments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deployment = await getDeploymentMetadata(id);
+    res.json(deployment);
+  } catch (error) {
+    console.error('Error getting deployment metadata:', error);
+    res.status(500).json({ error: 'Failed to get deployment metadata' });
+  }
+});
+
+/**
+ * Destroy a deployment
+ */
+app.post('/api/deployments/:id/destroy', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if deployment exists
+    const deploymentDir = getDeploymentDir(id);
+    try {
+      await fs.access(deploymentDir);
+    } catch (error) {
+      return res.status(404).json({ error: 'Deployment not found' });
+    }
+    
+    const socket = io.to(id);
+    
+    // Extract environment variables (similar to deploy)
+    // For destroy, we need the same environment as the original deployment
+    const envVars = {
+      ...process.env,
+      'TF_IN_AUTOMATION': 'true',
+      'TF_INPUT': 'false'
+    };
+    
+    // Start the destroy process
+    destroyDeployment(id, socket, envVars);
+    
+    res.json({ success: true, deploymentId: id, action: 'destroy' });
+  } catch (error) {
+    console.error('Destroy error:', error);
+    res.status(500).json({ error: 'Destroy failed' });
+  }
+});
+
+/**
+ * Delete a deployment directory (cleanup)
+ */
+app.delete('/api/deployments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const success = await deleteDeploymentDirectory(id);
+    
+    if (success) {
+      res.json({ success: true, message: 'Deployment directory deleted' });
+    } else {
+      res.status(500).json({ error: 'Failed to delete deployment directory' });
+    }
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({ error: 'Delete failed' });
   }
 });
 

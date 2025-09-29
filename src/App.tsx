@@ -3,6 +3,7 @@ import { Github, Play, Settings, Terminal, Code, FileText } from 'lucide-react'
 import RepositoryInput from './components/RepositoryInput'
 import VariablesForm from './components/VariablesForm'
 import DeploymentProgress from './components/DeploymentProgress'
+import DeploymentHistory from './components/DeploymentHistory'
 
 interface RepoData {
   owner: string
@@ -210,6 +211,11 @@ function App() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Deployment History Section */}
+          <div className="mt-12">
+            <DeploymentHistory />
           </div>
         </div>
       </main>
