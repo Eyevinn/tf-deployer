@@ -1,0 +1,553 @@
+openapi: 3.0.3
+info:
+  title: Terraform UI Deployer API
+  description: |
+    A REST API for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring.
+    
+    This API provides endpoints to parse GitHub repositories for Terraform variables and deploy infrastructure with real-time updates via WebSocket connections.
+  version: 1.0.0
+  contact:
+    name: Eyevinn Technology AB
+    url: https://github.com/EyevinnOSC/terraform-ui-deployer
+  license:
+    name: MIT
+    url: https://github.com/EyevinnOSC/terraform-ui-deployer/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:3001
+    description: Development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Repository
+    description: GitHub repository parsing operations
+  - name: Deployment
+    description: Terraform deployment operations
+  - name: WebSocket
+    description: Real-time communication for deployment progress
+
+paths:
+  /api/parse-github-url:
+    post:
+      tags:
+        - Repository
+      summary: Parse GitHub repository
+      description: |
+        Parse a GitHub repository URL to extract Terraform variables, README documentation, and repository metadata.
+        
+        This endpoint analyzes .tf files to extract variable definitions, parses README files for additional documentation,
+        and returns a comprehensive structure of all variables with their types, descriptions, and default values.
+      operationId: parseGithubRepository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - repoUrl
+              properties:
+                repoUrl:
+                  type: string
+                  format: uri
+                  description: GitHub repository URL in the format https://github.com/owner/repo/tree/branch/path
+                  example: "https://github.com/EyevinnOSC/terraform-examples/tree/main/aws-ec2"
+            examples:
+              aws-ec2:
+                summary: AWS EC2 example
+                value:
+                  repoUrl: "https://github.com/EyevinnOSC/terraform-examples/tree/main/aws-ec2"
+              azure-vm:
+                summary: Azure VM example  
+                value:
+                  repoUrl: "https://github.com/EyevinnOSC/terraform-examples/tree/main/azure-vm"
+      responses:
+        '200':
+          description: Successfully parsed repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryParseResponse'
+        '400':
+          description: Invalid GitHub URL format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Invalid GitHub URL format"
+        '404':
+          description: No Terraform files found in repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "No .tf files found in the repository"
+        '500':
+          description: Failed to parse GitHub repository
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Failed to parse GitHub repository"
+
+  /api/deploy:
+    post:
+      tags:
+        - Deployment
+      summary: Deploy Terraform infrastructure
+      description: |
+        Deploy Terraform infrastructure using the parsed repository data and user-provided variables.
+        
+        This endpoint creates a deployment directory, downloads repository files, generates tfvars file,
+        and starts the OpenTofu deployment process. Progress is communicated via WebSocket events.
+        
+        **Real-time Updates**: Connect to WebSocket and join the deployment room using the deploymentId
+        to receive real-time deployment logs and status updates.
+      operationId: deployInfrastructure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - repoData
+                - variables
+                - deploymentId
+              properties:
+                repoData:
+                  $ref: '#/components/schemas/RepositoryData'
+                variables:
+                  type: object
+                  description: User-provided variable values mapped by variable name
+                  additionalProperties:
+                    oneOf:
+                      - type: string
+                      - type: number
+                      - type: boolean
+                      - type: object
+                        properties:
+                          value:
+                            description: Variable value
+                          type:
+                            type: string
+                            description: Variable type
+                          sensitive:
+                            type: boolean
+                            description: Whether variable is sensitive
+                  example:
+                    region: "us-west-2"
+                    instance_type: "t3.micro"
+                    enable_monitoring: true
+                    tags:
+                      value:
+                        Environment: "production"
+                        Project: "web-app"
+                      type: "object"
+                deploymentId:
+                  type: string
+                  format: uuid
+                  description: Unique identifier for this deployment (used for WebSocket room)
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+            examples:
+              aws-deployment:
+                summary: AWS EC2 deployment
+                value:
+                  repoData:
+                    owner: "EyevinnOSC"
+                    repo: "terraform-examples"
+                    branch: "main"
+                    path: "aws-ec2"
+                  variables:
+                    region: "us-west-2"
+                    instance_type: "t3.micro"
+                    key_name: "my-key-pair"
+                  deploymentId: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Deployment started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deploymentId:
+                    type: string
+                    format: uuid
+                    description: Deployment identifier for tracking progress
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+        '400':
+          description: Invalid request or missing deployment ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Deployment ID is required"
+        '500':
+          description: Deployment failed to start
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Deployment failed"
+
+components:
+  schemas:
+    RepositoryParseResponse:
+      type: object
+      properties:
+        owner:
+          type: string
+          description: GitHub repository owner
+          example: "EyevinnOSC"
+        repo:
+          type: string
+          description: GitHub repository name
+          example: "terraform-examples"
+        branch:
+          type: string
+          description: Git branch name
+          example: "main"
+        path:
+          type: string
+          description: Path within repository
+          example: "aws-ec2"
+        terraformFiles:
+          type: array
+          items:
+            type: string
+          description: List of Terraform (.tf) file names found
+          example: ["main.tf", "variables.tf", "outputs.tf"]
+        tfvarsFile:
+          type: string
+          nullable: true
+          description: Terraform variables file name (currently always null as tfvars parsing is skipped)
+          example: null
+        readmeFile:
+          type: string
+          nullable: true
+          description: README file name if found
+          example: "README.md"
+        variables:
+          type: object
+          description: Merged variables from all sources with UI-friendly structure
+          additionalProperties:
+            $ref: '#/components/schemas/Variable'
+        terraformVariables:
+          type: object
+          description: Raw variables extracted from Terraform files
+          additionalProperties:
+            $ref: '#/components/schemas/TerraformVariable'
+        tfvarsVariables:
+          type: object
+          description: Variables from tfvars files (currently empty object)
+          additionalProperties: {}
+        readmeVariables:
+          type: object
+          description: Variables extracted from README documentation
+          additionalProperties:
+            $ref: '#/components/schemas/ReadmeVariable'
+        readmeContent:
+          type: string
+          description: First 2000 characters of README content for reference
+          example: "# AWS EC2 Example\n\nThis example creates an EC2 instance..."
+        allFiles:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileInfo'
+          description: List of all files found in the repository path
+
+    RepositoryData:
+      type: object
+      description: Repository information required for deployment
+      properties:
+        owner:
+          type: string
+          example: "EyevinnOSC"
+        repo:
+          type: string
+          example: "terraform-examples"
+        branch:
+          type: string
+          example: "main"
+        path:
+          type: string
+          example: "aws-ec2"
+        terraformVariables:
+          type: object
+          description: Original Terraform variable definitions (used for sensitive flag detection)
+          additionalProperties:
+            $ref: '#/components/schemas/TerraformVariable'
+
+    Variable:
+      type: object
+      description: UI-friendly variable structure with merged information from all sources
+      properties:
+        value:
+          description: Current/default value of the variable
+          example: "t3.micro"
+        type:
+          type: string
+          enum: ["string", "number", "boolean", "array", "object"]
+          description: Display type for UI rendering
+          example: "string"
+        original:
+          description: Original default value from source
+          example: "t3.micro"
+        description:
+          type: string
+          description: Variable description from Terraform or README
+          example: "EC2 instance type"
+        source:
+          type: string
+          enum: ["terraform", "readme", "tfvars"]
+          description: Primary source of the variable
+          example: "terraform"
+        sources:
+          type: array
+          items:
+            type: string
+            enum: ["terraform", "readme", "tfvars"]
+          description: All sources where this variable was found
+          example: ["terraform", "readme"]
+        file:
+          type: string
+          description: Source file name where variable was defined
+          example: "variables.tf"
+        terraformType:
+          type: string
+          description: Original Terraform type declaration
+          example: "string"
+        sensitive:
+          type: boolean
+          description: Whether variable contains sensitive information
+          example: false
+        nullable:
+          type: boolean
+          description: Whether variable can be null
+          example: true
+        required:
+          type: boolean
+          description: Whether variable is required (no default and not nullable)
+          example: false
+
+    TerraformVariable:
+      type: object
+      description: Raw variable definition from Terraform files
+      properties:
+        name:
+          type: string
+          example: "instance_type"
+        source:
+          type: string
+          example: "terraform"
+        file:
+          type: string
+          example: "variables.tf"
+        type:
+          type: string
+          description: Terraform type
+          example: "string"
+        description:
+          type: string
+          example: "EC2 instance type"
+        default:
+          description: Default value from Terraform
+          example: "t3.micro"
+        sensitive:
+          type: boolean
+          example: false
+        nullable:
+          type: boolean
+          example: true
+        validation:
+          type: array
+          items: {}
+          description: Terraform validation rules
+          example: []
+
+    ReadmeVariable:
+      type: object
+      description: Variable information extracted from README documentation
+      properties:
+        value:
+          description: Parsed default value from README
+        type:
+          type: string
+          description: Inferred type
+        description:
+          type: string
+          description: Description from README
+        source:
+          type: string
+          example: "readme"
+        original:
+          type: string
+          description: Original string from README
+
+    FileInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: File name
+          example: "main.tf"
+        type:
+          type: string
+          enum: ["file", "dir"]
+          description: File type
+          example: "file"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message describing what went wrong
+          example: "Invalid GitHub URL format"
+
+  # WebSocket Event Schemas (for documentation purposes)
+  x-websocket-events:
+    deployment-log:
+      description: Regular deployment log message
+      payload:
+        type: object
+        properties:
+          message:
+            type: string
+            description: Log message content
+            example: "Repository files downloaded"
+          timestamp:
+            type: string
+            format: date-time
+            description: ISO timestamp of the log entry
+            example: "2023-12-07T10:30:45.123Z"
+
+    deployment-error:
+      description: Error message during deployment
+      payload:
+        type: object
+        properties:
+          message:
+            type: string
+            description: Error message content
+            example: "Failed to initialize Terraform"
+          timestamp:
+            type: string
+            format: date-time
+            description: ISO timestamp of the error
+            example: "2023-12-07T10:30:45.123Z"
+
+    deployment-complete:
+      description: Deployment completion notification
+      payload:
+        type: object
+        properties:
+          success:
+            type: boolean
+            description: Whether deployment completed successfully
+            example: true
+          message:
+            type: string
+            description: Completion message
+            example: "Deployment completed successfully"
+          timestamp:
+            type: string
+            format: date-time
+            description: ISO timestamp of completion
+            example: "2023-12-07T10:30:45.123Z"
+
+# WebSocket API Documentation
+x-websocket-api:
+  description: |
+    ## WebSocket API for Real-time Deployment Updates
+    
+    The WebSocket API provides real-time communication for deployment progress updates.
+    
+    ### Connection
+    - **URL**: `ws://localhost:3001/socket.io/`
+    - **Protocol**: Socket.IO v4
+    
+    ### Client Events (Send to Server)
+    
+    #### `join-deployment`
+    Join a deployment room to receive updates for a specific deployment.
+    ```javascript
+    socket.emit('join-deployment', deploymentId);
+    ```
+    
+    ### Server Events (Receive from Server)
+    
+    #### `deployment-log`
+    Regular deployment progress logs.
+    
+    #### `deployment-error` 
+    Error messages during deployment.
+    
+    #### `deployment-complete`
+    Final deployment result (success or failure).
+    
+    ### Example Usage
+    ```javascript
+    import io from 'socket.io-client';
+    
+    const socket = io('http://localhost:3001');
+    
+    // Join deployment room
+    socket.emit('join-deployment', deploymentId);
+    
+    // Listen for updates
+    socket.on('deployment-log', (data) => {
+      console.log(`[${data.timestamp}] ${data.message}`);
+    });
+    
+    socket.on('deployment-error', (data) => {
+      console.error(`[${data.timestamp}] ERROR: ${data.message}`);
+    });
+    
+    socket.on('deployment-complete', (data) => {
+      console.log(`Deployment ${data.success ? 'succeeded' : 'failed'}: ${data.message}`);
+    });
+    ```
+
+  environment-variables:
+    description: |
+      ## Environment Variables
+      
+      The API supports various Terraform and cloud provider environment variables for backend configuration and authentication:
+      
+      ### Terraform Configuration
+      - `TF_DATA_DIR` - Custom directory for Terraform state files
+      - `TF_WORKSPACE` - Terraform workspace
+      - `TF_STATE_LOCK` - Enable/disable state locking
+      - `TF_STATE_LOCK_TIMEOUT` - State lock timeout in seconds
+      - `TF_CLOUD_ORGANIZATION` - Terraform Cloud organization
+      - `TF_TOKEN` - Terraform Cloud token
+      
+      ### AWS Provider
+      - `AWS_PROFILE` - AWS profile name
+      - `AWS_REGION` - AWS region
+      - `AWS_ACCESS_KEY_ID` - AWS access key
+      - `AWS_SECRET_ACCESS_KEY` - AWS secret key
+      
+      ### Azure Provider  
+      - `AZURE_SUBSCRIPTION_ID` - Azure subscription ID
+      - `AZURE_CLIENT_ID` - Azure client ID
+      - `AZURE_CLIENT_SECRET` - Azure client secret
+      - `AZURE_TENANT_ID` - Azure tenant ID
+      
+      ### Google Cloud Provider
+      - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account JSON
+      - `GOOGLE_PROJECT` - GCP project ID
+      - `GOOGLE_REGION` - GCP region
+      
+      See [TERRAFORM_CONFIG.md](./TERRAFORM_CONFIG.md) for detailed configuration examples.
