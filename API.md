@@ -66,7 +66,7 @@ Parse a GitHub repository URL to extract Terraform variables, README documentati
 
 **Endpoint**: `POST /api/deploy`
 
-Deploy Terraform infrastructure using parsed repository data and user-provided variables.
+Deploy Terraform infrastructure using parsed repository data and user-provided variables. File permissions from the source repository are preserved during download, ensuring executable scripts maintain their execution permissions.
 
 #### Request Body
 ```json
@@ -220,6 +220,15 @@ The API supports various Terraform and cloud provider environment variables:
 
 See [TERRAFORM_CONFIG.md](./TERRAFORM_CONFIG.md) for detailed configuration examples.
 
+## File Permissions
+
+The API preserves file permissions when downloading repository files:
+
+1. **Executable Files**: Files marked as executable (mode `100755`) in GitHub maintain their executable permissions
+2. **Script Auto-Detection**: Script files (`.sh`, `.bash`, `.zsh`, `.py`, `.pl`, `.rb`, `.js`, `.ts`) are automatically made executable even if not marked as such in the repository
+3. **Regular Files**: Standard files (mode `100644`) maintain read/write permissions for owner and read permissions for group/others
+4. **Cross-Platform**: Permission setting gracefully handles platforms that don't support chmod operations
+
 ## Security Considerations
 
 1. **Sensitive Variables**: Variables marked as `sensitive: true` in Terraform are automatically passed as environment variables (`TF_VAR_*`) instead of being written to tfvars files.
@@ -228,7 +237,9 @@ See [TERRAFORM_CONFIG.md](./TERRAFORM_CONFIG.md) for detailed configuration exam
 
 3. **State Management**: Supports various backend configurations through environment variables for secure state storage.
 
-4. **CORS**: Configured to accept requests from `http://localhost:5173` for development.
+4. **File Permissions**: Downloaded files maintain their original permissions, ensuring executable scripts can run while preventing unintended execution of non-executable files.
+
+5. **CORS**: Configured to accept requests from `http://localhost:5173` for development.
 
 ## Error Handling
 

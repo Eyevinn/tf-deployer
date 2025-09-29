@@ -127,6 +127,43 @@ async function parseGitHubRepository(repoUrl) {
 }
 
 /**
+ * Set file permissions based on GitHub's mode field
+ * @param {string} filePath - Path to the file
+ * @param {string} mode - GitHub mode field (e.g., "100644", "100755")
+ */
+async function setFilePermissions(filePath, mode) {
+  // Convert GitHub mode to octal permissions
+  // GitHub mode format: "100644" where last 3 digits are permissions
+  let permissions = parseInt(mode.slice(-3), 8);
+  
+  // Special handling for executable files
+  if (mode === '100755') {
+    // Executable file: 755 (rwxr-xr-x)
+    permissions = 0o755;
+  } else if (mode === '100644') {
+    // Regular file: 644 (rw-r--r--)
+    permissions = 0o644;
+  }
+  
+  // Additional check for script files by extension
+  const fileName = path.basename(filePath);
+  const scriptExtensions = ['.sh', '.bash', '.zsh', '.py', '.pl', '.rb', '.js', '.ts'];
+  const isScriptFile = scriptExtensions.some(ext => fileName.endsWith(ext));
+  
+  // If it's a script file but not marked executable, make it executable
+  if (isScriptFile && permissions === 0o644) {
+    permissions = 0o755;
+  }
+  
+  try {
+    await fs.chmod(filePath, permissions);
+  } catch (error) {
+    // Don't fail the entire process if permission setting fails
+    // This might happen on some file systems or platforms that don't support chmod
+  }
+}
+
+/**
  * Download repository files to a local directory
  * @param {Object} repoData - Repository data object
  * @param {string} targetDir - Target directory to download files to
@@ -141,6 +178,11 @@ async function downloadRepository(repoData, targetDir) {
       const fileContent = await downloadFile(file.download_url);
       const filePath = path.join(targetDir, file.name);
       await fs.writeFile(filePath, fileContent);
+      
+      // Preserve file permissions based on GitHub's mode field
+      if (file.mode) {
+        await setFilePermissions(filePath, file.mode);
+      }
     }
   }
 }
@@ -150,5 +192,6 @@ export {
   fetchRepositoryContents,
   downloadFile,
   parseGitHubRepository,
-  downloadRepository
+  downloadRepository,
+  setFilePermissions
 };

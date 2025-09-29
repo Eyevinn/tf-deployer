@@ -102,8 +102,10 @@ paths:
       description: |
         Deploy Terraform infrastructure using the parsed repository data and user-provided variables.
         
-        This endpoint creates a deployment directory, downloads repository files, generates tfvars file,
-        and starts the OpenTofu deployment process. Progress is communicated via WebSocket events.
+        This endpoint creates a deployment directory, downloads repository files with preserved file permissions,
+        generates tfvars file, and starts the OpenTofu deployment process. File permissions from the source 
+        repository are maintained, ensuring executable scripts retain their execution permissions.
+        Progress is communicated via WebSocket events.
         
         **Real-time Updates**: Connect to WebSocket and join the deployment room using the deploymentId
         to receive real-time deployment logs and status updates.
