@@ -1,8 +1,8 @@
-# Terraform UI Deployer API Documentation
+# OpenTofu Deployer API Documentation
 
 ## Overview
 
-The Terraform UI Deployer provides a REST API for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring via WebSocket connections.
+The OpenTofu Deployer provides a REST API for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring via WebSocket connections.
 
 **Base URL**: `http://localhost:3001`
 
@@ -239,7 +239,7 @@ npm run server
 # Map host directories to container
 docker run -e TEMP_DIR=/app/temp -e DEPLOYMENTS_DIR=/app/deployments \
   -v /host/temp:/app/temp -v /host/deployments:/app/deployments \
-  terraform-ui-deployer
+  opentofu-deployer
 ```
 
 #### Development with Terraform Cloud

@@ -49,7 +49,7 @@ function App() {
             <div className="flex items-center space-x-3">
               <Terminal className="h-8 w-8 text-blue-600" />
               <h1 className="text-xl font-semibold text-gray-900">
-                Terraform UI Deployer
+                OpenTofu Deployer
               </h1>
             </div>
             <div className="flex items-center space-x-2 text-sm text-gray-500">

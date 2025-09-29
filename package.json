@@ -1,5 +1,5 @@
 {
-  "name": "terraform-ui-deployer",
+  "name": "opentofu-deployer",
   "private": false,
   "version": "1.0.0",
   "description": "A web application for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring",

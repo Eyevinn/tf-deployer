@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Terraform UI Deployer API
+  title: OpenTofu Deployer API
   description: |
     A REST API for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring.
     
