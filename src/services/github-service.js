@@ -127,39 +127,58 @@ async function parseGitHubRepository(repoUrl) {
 }
 
 /**
- * Set file permissions based on GitHub's mode field
+ * Set file permissions based on GitHub's mode field or file detection
  * @param {string} filePath - Path to the file
- * @param {string} mode - GitHub mode field (e.g., "100644", "100755")
+ * @param {string} [mode] - Optional GitHub mode field (e.g., "100644", "100755")
  */
 async function setFilePermissions(filePath, mode) {
-  // Convert GitHub mode to octal permissions
-  // GitHub mode format: "100644" where last 3 digits are permissions
-  let permissions = parseInt(mode.slice(-3), 8);
+  let permissions;
   
-  // Special handling for executable files
-  if (mode === '100755') {
-    // Executable file: 755 (rwxr-xr-x)
-    permissions = 0o755;
-  } else if (mode === '100644') {
-    // Regular file: 644 (rw-r--r--)
-    permissions = 0o644;
+  if (mode) {
+    // Convert GitHub mode to octal permissions
+    // GitHub mode format: "100644" where last 3 digits are permissions
+    permissions = parseInt(mode.slice(-3), 8);
+    
+    // Special handling for executable files
+    if (mode === '100755') {
+      // Executable file: 755 (rwxr-xr-x)
+      permissions = 0o755;
+    } else if (mode === '100644') {
+      // Regular file: 644 (rw-r--r--)
+      permissions = 0o644;
+    }
+  } else {
+    // Default permissions when GitHub mode is not available
+    permissions = 0o644; // Regular file permissions as default
   }
   
-  // Additional check for script files by extension
+  // Additional check for script files by extension and common shell script names
   const fileName = path.basename(filePath);
-  const scriptExtensions = ['.sh', '.bash', '.zsh', '.py', '.pl', '.rb', '.js', '.ts'];
-  const isScriptFile = scriptExtensions.some(ext => fileName.endsWith(ext));
+  const scriptExtensions = ['.sh', '.bash', '.zsh', '.ksh', '.csh', '.fish', '.py', '.pl', '.rb', '.js', '.ts', '.run', '.command'];
+  const commonScriptNames = ['install', 'setup', 'configure', 'deploy', 'build', 'start', 'stop', 'restart'];
   
-  // If it's a script file but not marked executable, make it executable
-  if (isScriptFile && permissions === 0o644) {
+  const isScriptFile = scriptExtensions.some(ext => fileName.endsWith(ext)) ||
+                      commonScriptNames.some(name => fileName.toLowerCase() === name) ||
+                      fileName.startsWith('install') ||
+                      fileName.startsWith('setup') ||
+                      fileName.startsWith('deploy');
+  
+  // Always make script files executable regardless of original permissions
+  if (isScriptFile) {
     permissions = 0o755;
   }
   
   try {
     await fs.chmod(filePath, permissions);
+    
+    // Log when script files are made executable for debugging
+    if (isScriptFile) {
+      console.log(`Set executable permissions for script file: ${fileName}`);
+    }
   } catch (error) {
     // Don't fail the entire process if permission setting fails
     // This might happen on some file systems or platforms that don't support chmod
+    console.log(`Warning: Could not set permissions for ${fileName}: ${error.message}`);
   }
 }
 
@@ -179,10 +198,8 @@ async function downloadRepository(repoData, targetDir) {
       const filePath = path.join(targetDir, file.name);
       await fs.writeFile(filePath, fileContent);
       
-      // Preserve file permissions based on GitHub's mode field
-      if (file.mode) {
-        await setFilePermissions(filePath, file.mode);
-      }
+      // Set file permissions (use GitHub mode if available, otherwise detect scripts)
+      await setFilePermissions(filePath, file.mode);
     }
   }
 }

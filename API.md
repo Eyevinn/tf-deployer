@@ -252,11 +252,14 @@ npm run server
 
 ## File Permissions
 
-The API preserves file permissions when downloading repository files:
+The API automatically sets appropriate file permissions for all downloaded repository files:
 
-1. **Executable Files**: Files marked as executable (mode `100755`) in GitHub maintain their executable permissions
-2. **Script Auto-Detection**: Script files (`.sh`, `.bash`, `.zsh`, `.py`, `.pl`, `.rb`, `.js`, `.ts`) are automatically made executable even if not marked as such in the repository
-3. **Regular Files**: Standard files (mode `100644`) maintain read/write permissions for owner and read permissions for group/others
+1. **Enhanced Script Auto-Detection**: Script files are automatically made executable regardless of GitHub permissions:
+   - **File extensions**: `.sh`, `.bash`, `.zsh`, `.ksh`, `.csh`, `.fish`, `.py`, `.pl`, `.rb`, `.js`, `.ts`, `.run`, `.command`
+   - **Common script names**: `install`, `setup`, `configure`, `deploy`, `build`, `start`, `stop`, `restart` (case-insensitive)
+   - **Name patterns**: Files starting with `install`, `setup`, or `deploy`
+2. **GitHub Mode Preservation**: When GitHub provides file mode information, it's used as the base permission
+3. **Default Permissions**: Files without GitHub mode info default to standard read/write permissions (644)
 4. **Cross-Platform**: Permission setting gracefully handles platforms that don't support chmod operations
 
 ## Security Considerations

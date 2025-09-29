@@ -102,9 +102,15 @@ paths:
       description: |
         Deploy Terraform infrastructure using the parsed repository data and user-provided variables.
         
-        This endpoint creates a deployment directory, downloads repository files with preserved file permissions,
-        generates tfvars file, and starts the OpenTofu deployment process. File permissions from the source 
-        repository are maintained, ensuring executable scripts retain their execution permissions.
+        This endpoint creates a deployment directory, downloads repository files and automatically sets appropriate permissions,
+        generates tfvars file, and starts the OpenTofu deployment process. All files receive proper permissions regardless
+        of whether GitHub provides mode information.
+        
+        **Enhanced Script Detection**: The system automatically identifies and makes executable various types of scripts:
+        - File extensions: .sh, .bash, .zsh, .ksh, .csh, .fish, .py, .pl, .rb, .js, .ts, .run, .command
+        - Common script names: install, setup, configure, deploy, build, start, stop, restart
+        - Name patterns: Files starting with install, setup, or deploy
+        - Scripts are made executable regardless of their original GitHub permissions
         Progress is communicated via WebSocket events.
         
         **Real-time Updates**: Connect to WebSocket and join the deployment room using the deploymentId
