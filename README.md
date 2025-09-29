@@ -1,10 +1,11 @@
-# Terraform UI Deployer
+# OpenTofu Deployer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D16-brightgreen)](https://nodejs.org/)
 [![OpenTofu](https://img.shields.io/badge/OpenTofu-Compatible-blue)](https://opentofu.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com/)
 
-A web application for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring.
+A web application for deploying Terraform scripts from GitHub repositories using OpenTofu with real-time progress monitoring and deployment management.
 
 **Developed by [Eyevinn Technology AB](https://www.eyevinn.se/)**
 
@@ -17,13 +18,24 @@ A web application for deploying Terraform scripts from GitHub repositories using
 - **Rich Variable Information**: Display types, descriptions, defaults, sensitivity, and requirements
 - **Dynamic Form Generation**: Automatically generate forms with proper validation and type hints
 - **Real-time Deployment**: Monitor OpenTofu deployment progress with live logs
-- **WebSocket Communication**: Real-time updates during deployment process
+- **Deployment History**: View and manage all past deployments with metadata tracking
+- **Infrastructure Destruction**: Safely destroy deployed infrastructure with real-time feedback
+- **File Permission Management**: Automatically set execution permissions for downloaded scripts
+- **WebSocket Communication**: Real-time updates during deployment and destruction processes
+- **Docker Ready**: Complete containerization with OpenTofu pre-installed
+- **Production Deployment**: Built-in nginx reverse proxy and process management
+- **Configurable Storage**: Environment-configurable directories for user content and deployments
 - **Responsive Design**: Clean, modern interface built with React and Tailwind CSS
 
 ## Prerequisites
 
-Before running this application, make sure you have:
+Choose one of the following deployment methods:
 
+### Option 1: Docker Deployment (Recommended)
+- **Docker** and **Docker Compose** installed
+- No other dependencies needed - OpenTofu is included in the container
+
+### Option 2: Local Development
 1. **Node.js** (v16 or higher)
 2. **OpenTofu** installed and available in your PATH
    ```bash
@@ -31,17 +43,59 @@ Before running this application, make sure you have:
    brew install opentofu
    ```
 
-## Installation
+## Installation & Usage
 
-1. Clone or download this project
-2. Install dependencies:
+### Option 1: Docker Deployment (Production)
+
+1. Clone the repository:
    ```bash
+   git clone <repository-url>
+   cd opentofu-deployer
+   ```
+
+2. Deploy with Docker Compose:
+   ```bash
+   # Default deployment on port 8080
+   docker-compose up -d
+   
+   # Custom port deployment
+   PORT=3000 docker-compose up -d
+   ```
+
+3. Access the application at `http://localhost:8080` (or your custom port)
+
+#### Alternative Docker Commands
+
+```bash
+# Build the image
+docker build -t opentofu-deployer .
+
+# Run with default settings (port 80 inside container, mapped to 8080)
+docker run -d -p 8080:80 \
+  -v opentofu-data:/data \
+  -v opentofu-temp:/usercontent \
+  opentofu-deployer
+
+# Run with custom port and environment variables
+docker run -d -p 3000:3000 \
+  -e PORT=3000 \
+  -e TEMP_DIR=/usercontent \
+  -e DEPLOYMENTS_DIR=/data \
+  -v $(pwd)/data:/data \
+  -v $(pwd)/temp:/usercontent \
+  opentofu-deployer
+```
+
+### Option 2: Local Development
+
+1. Clone the repository and install dependencies:
+   ```bash
+   git clone <repository-url>
+   cd opentofu-deployer
    npm install
    ```
 
-## Usage
-
-1. Start both the frontend and backend:
+2. Start both the frontend and backend:
    ```bash
    npm start
    ```
@@ -49,20 +103,24 @@ Before running this application, make sure you have:
    - Backend server on `http://localhost:3001`
    - Frontend development server on `http://localhost:5173`
 
-2. Open your browser and navigate to `http://localhost:5173`
+3. Open your browser and navigate to `http://localhost:5173`
 
-3. Enter a GitHub repository URL containing Terraform scripts, for example:
+## How to Use
+
+1. **Enter Repository URL**: Paste a GitHub repository URL containing Terraform scripts, for example:
    ```
    https://github.com/EyevinnOSC/terraform-examples/tree/main/examples/intercom
    ```
 
-4. The application will parse the repository and extract variables from the `.tfvars` file
+2. **Configure Variables**: The application will parse the repository and extract variables from Terraform files, `.tfvars` files, and README documentation. Fill in the configuration values in the generated form.
 
-5. Fill in the configuration values in the generated form
+3. **Deploy Infrastructure**: Click "Deploy with OpenTofu" to start the deployment and monitor real-time progress in the deployment logs.
 
-6. Click "Deploy with OpenTofu" to start the deployment
-
-7. Monitor the real-time progress in the deployment logs
+4. **Manage Deployments**: Use the deployment history section to:
+   - View all past deployments with metadata
+   - Monitor deployment status (Active, Initialized, Error)
+   - Destroy infrastructure safely with real-time feedback
+   - Delete deployment files and cleanup resources
 
 ## Supported Repository Structure
 
@@ -130,9 +188,24 @@ The application can automatically extract variable information from README files
 
 ## API Endpoints
 
+### Core Functionality
 - `POST /api/parse-github-url` - Parse a GitHub repository URL and extract variables
 - `POST /api/deploy` - Start a deployment with the provided configuration
-- WebSocket events for real-time deployment updates
+
+### Deployment Management  
+- `GET /api/deployments` - Get deployment history with metadata
+- `GET /api/deployments/:id` - Get specific deployment information
+- `POST /api/deployments/:id/destroy` - Destroy infrastructure for a deployment
+- `DELETE /api/deployments/:id` - Delete deployment files and cleanup
+
+### Real-time Communication
+- WebSocket events for real-time deployment and destruction updates
+- Live progress monitoring during OpenTofu operations
+
+### Environment Configuration
+- `TEMP_DIR` - Directory for temporary files (default: `./temp`)
+- `DEPLOYMENTS_DIR` - Directory for deployment storage (default: `./deployments`)
+- `PORT` - Server port (default: 3001 for development, 80 for Docker)
 
 ## Development
 
@@ -157,31 +230,114 @@ npm run build
 - **Backend**: Node.js with Express, Socket.IO for real-time communication
 - **Deployment**: OpenTofu (Terraform alternative) for infrastructure deployment
 - **Communication**: RESTful API + WebSocket for real-time updates
+- **Containerization**: Docker with multi-stage builds, nginx reverse proxy
+- **Process Management**: Supervisor for managing nginx and Node.js processes
+- **Storage**: Persistent volumes for user content and deployment data
+
+## Docker Configuration
+
+The application includes complete Docker containerization with:
+
+### Container Features
+- **OpenTofu 1.6.0** pre-installed and ready to use
+- **Nginx reverse proxy** for production-grade static file serving
+- **Multi-stage build** for optimized image size
+- **Non-root user** for security hardening
+- **Health checks** for container monitoring
+- **Supervisor** for process management
+
+### Volume Mounts
+- `/usercontent` - Temporary files and user content (maps to `TEMP_DIR`)
+- `/data` - Persistent deployment storage (maps to `DEPLOYMENTS_DIR`)
+
+### Environment Variables
+- `PORT` - Configure the listening port (default: 80)
+- `TEMP_DIR` - Temporary files directory (default: `/usercontent`)
+- `DEPLOYMENTS_DIR` - Deployment storage directory (default: `/data`)
+
+### Health Check
+The container includes a health check endpoint at `/health` that verifies:
+- Application responsiveness
+- API endpoint availability
+- Service health status
 
 ## Security Considerations
 
 - The application executes OpenTofu commands on the server
 - Repository contents are temporarily downloaded to the server
+- **Docker Security**: Application runs as non-root user in container
+- **Volume Security**: Ensure proper permissions on mounted volumes
+- **Network Security**: Use nginx reverse proxy for production deployments
 - Ensure proper access controls in production environments
 - Consider sandboxing deployment executions
+- **Environment Variables**: Sensitive data is handled via environment variables
+- **File Permissions**: Scripts automatically receive proper execution permissions
 
 ## Troubleshooting
 
-### OpenTofu Not Found
+### Docker Issues
+
+#### Container Build Failures
+```bash
+# Clean build without cache
+docker build --no-cache -t opentofu-deployer .
+
+# Check build logs for specific errors
+docker build -t opentofu-deployer . 2>&1 | tee build.log
+```
+
+#### Container Won't Start
+```bash
+# Check container logs
+docker logs <container-name>
+
+# Inspect container configuration
+docker inspect <container-name>
+
+# Check if port is already in use
+lsof -i :8080
+```
+
+#### Volume Permission Issues
+```bash
+# Fix volume permissions (Linux/macOS)
+sudo chown -R 1001:1001 ./data ./temp
+
+# Or use Docker to fix permissions
+docker run --rm -v $(pwd)/data:/data -v $(pwd)/temp:/temp alpine chown -R 1001:1001 /data /temp
+```
+
+### Local Development Issues
+
+#### OpenTofu Not Found
 If you get an error about OpenTofu not being found:
 1. Make sure OpenTofu is installed: `tofu --version`
 2. Ensure it's in your system PATH
 3. Restart the server after installation
 
-### GitHub API Rate Limits
+#### GitHub API Rate Limits
 The application uses the GitHub API without authentication, which has rate limits:
 - Consider adding GitHub token authentication for higher limits
 - The current implementation supports public repositories only
 
-### Port Conflicts
+#### Port Conflicts
 If ports 3001 or 5173 are already in use:
 - Change the PORT environment variable for the backend
 - Modify the Vite configuration for the frontend
+
+### Deployment Issues
+
+#### Destroy Button Not Working
+1. Check browser console for JavaScript errors
+2. Verify WebSocket connection is established
+3. Check server logs for API errors
+4. Ensure deployment has active state file
+
+#### File Permission Errors
+The application automatically sets permissions, but if issues persist:
+- Check that the container user has access to volume mounts
+- Verify that downloaded scripts have executable permissions
+- Review server logs for permission-related errors
 
 ## Contributing
 
