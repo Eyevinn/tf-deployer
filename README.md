@@ -9,6 +9,14 @@ A web application for deploying Terraform scripts from GitHub repositories using
 
 **Developed by [Eyevinn Technology AB](https://www.eyevinn.se/)**
 
+## Screenshots
+
+### Main Interface with Repository Parsing and Variable Configuration
+![Screenshot 1](screenshot1.png)
+
+### Deployment History and Management
+![Screenshot 2](screenshot2.png)
+
 ## Features
 
 - **GitHub Integration**: Parse GitHub repository URLs to extract Terraform configurations
