@@ -35,6 +35,14 @@ A web application for deploying Terraform scripts from GitHub repositories using
 - **Configurable Storage**: Environment-configurable directories for user content and deployments
 - **Responsive Design**: Clean, modern interface built with React and Tailwind CSS
 
+## 🚀 Quick Start with Open Source Cloud
+
+The easiest way to get started is through [Open Source Cloud](https://app.osaas.io/browse/eyevinn-tf-deployer), where you can deploy this application with one click:
+
+[![Deploy on Open Source Cloud](https://img.shields.io/badge/Deploy%20on-Open%20Source%20Cloud-blue?style=for-the-badge)](https://app.osaas.io/browse/eyevinn-tf-deployer)
+
+Open Source Cloud provides instant deployment with no setup required - perfect for testing or production use.
+
 ## Prerequisites
 
 Choose one of the following deployment methods:
