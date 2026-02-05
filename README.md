@@ -9,6 +9,19 @@ A web application for deploying Terraform scripts from GitHub repositories using
 
 **Developed by [Eyevinn Technology AB](https://www.eyevinn.se/)**
 
+---
+<div align="center">
+
+## Quick Demo: Open Source Cloud
+
+Run this service in the cloud with a single click.
+
+[![Badge OSC](https://img.shields.io/badge/Try%20it%20out!-1E3A8A?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTIiIGZpbGw9InVybCgjcGFpbnQwX2xpbmVhcl8yODIxXzMxNjcyKSIvPgo8Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI3IiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiLz4KPGRlZnM+CjxsaW5lYXJHcmFkaWVudCBpZD0icGFpbnQwX2xpbmVhcl8yODIxXzMxNjcyIiB4MT0iMTIiIHkxPSIwIiB4Mj0iMTIiIHkyPSIyNCIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgo8c3RvcCBzdG9wLWNvbG9yPSIjQzE4M0ZGIi8+CjxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iIzREQzlGRiIvPgo8L2xpbmVhckdyYWRpZW50Pgo8L2RlZnM+Cjwvc3ZnPgo=)](https://app.osaas.io/browse/eyevinn-tf-deployer)
+
+</div>
+
+---
+
 ## Screenshots
 
 ### Main Interface with Repository Parsing and Variable Configuration
@@ -34,14 +47,6 @@ A web application for deploying Terraform scripts from GitHub repositories using
 - **Production Deployment**: Built-in nginx reverse proxy and process management
 - **Configurable Storage**: Environment-configurable directories for user content and deployments
 - **Responsive Design**: Clean, modern interface built with React and Tailwind CSS
-
-## 🚀 Quick Start with Open Source Cloud
-
-The easiest way to get started is through [Open Source Cloud](https://app.osaas.io/browse/eyevinn-tf-deployer), where you can deploy this application with one click:
-
-[![Deploy on Open Source Cloud](https://img.shields.io/badge/Deploy%20on-Open%20Source%20Cloud-blue?style=for-the-badge)](https://app.osaas.io/browse/eyevinn-tf-deployer)
-
-Open Source Cloud provides instant deployment with no setup required - perfect for testing or production use.
 
 ## Prerequisites
 
