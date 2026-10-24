@@ -1,7 +1,7 @@
 # OpenTofu Deployer
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D16-brightgreen)](https://nodejs.org/)
+[![Node.js Version](https://img.shields.io/badge/node-%5E22.23.4%20%7C%7C%20%3E%3D24.22.1-brightgreen)](https://nodejs.org/)
 [![OpenTofu](https://img.shields.io/badge/OpenTofu-Compatible-blue)](https://opentofu.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED)](https://www.docker.com/)
 
@@ -52,7 +52,7 @@ Choose one of the following deployment methods:
 - No other dependencies needed - OpenTofu is included in the container
 
 ### Option 2: Local Development
-1. **Node.js** (v16 or higher)
+1. **Node.js** (v22.23.4+ or v24.22.1+)
 2. **OpenTofu** installed and available in your PATH
    ```bash
    # Install OpenTofu (example for macOS)
