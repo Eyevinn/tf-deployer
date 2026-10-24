@@ -24,6 +24,9 @@
     "url": "https://github.com/EyevinnOSC/terraform-ui-deployer/issues"
   },
   "homepage": "https://github.com/EyevinnOSC/terraform-ui-deployer#readme",
+  "engines": {
+    "node": "^22.23.4 || >=24.22.1"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
